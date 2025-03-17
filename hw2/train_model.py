@@ -24,7 +24,20 @@ def preprocess_dataset(dataset: Dataset, tokenizer: BertTokenizerFast) \
     :param tokenizer: A tokenizer
     :return: The dataset, prepreprocessed using the tokenizer
     """
-    raise NotImplementedError("Problem 1d has not been completed yet!")
+    # Data is pre-processed through the following steps:
+    # 1. All input texts should be tokenized
+    # 2. BERT models have a maximum input lenght, and all inputs need to be truncated to this length.
+    # 3. Inputs shorter than the maximum input length should be padded to this length.
+    # 4. The pre-processed inputs do not need to be in the form of PyTorch tensors.
+
+    def tokenize_function(examples):
+        return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=512)
+
+    tokenized_dataset = dataset.map(tokenize_function, batched=True)
+    return tokenized_dataset
+
+
+    #raise NotImplementedError("Problem 1d has not been completed yet!")
 
 
 def init_model(trial: Any, model_name: str, use_bitfit: bool = False) -> \
@@ -46,7 +59,13 @@ def init_model(trial: Any, model_name: str, use_bitfit: bool = False) -> \
         than bias terms
     :return: A newly initialized pre-trained Transformer classifier
     """
-    raise NotImplementedError("Problem 2a has not been completed yet!")
+    #raise NotImplementedError("Problem 2a has not been completed yet!")
+    model = BertForSequenceClassification.from_pretrained(model_name)
+    if use_bitfit:
+        for name, param in model.named_parameters():
+            if "bias" not in name:
+                param.requires_grad = False
+    return model
 
 
 def init_trainer(model_name: str, train_data: Dataset, val_data: Dataset,
@@ -66,7 +85,32 @@ def init_trainer(model_name: str, train_data: Dataset, val_data: Dataset,
         than bias terms
     :return: A Trainer used for training
     """
-    raise NotImplementedError("Problem 2b has not been completed yet!")
+    #raise NotImplementedError("Problem 2b has not been completed yet!")
+    #model = init_model(None, model_name, use_bitfit)
+
+    training_args = TrainingArguments(
+        output_dir = "./checkpoints",
+        evaluation_strategy = "epoch",
+        save_strategy = "epoch",
+        num_train_epochs = 4
+    )
+
+    def compute_metrics(p: EvalPrediction):
+        metric = evaluate.load("accuracy")
+        logits, labels = p.predictions, p.label_ids
+        predictions = np.argmax(logits, axis=-1)
+        return metric.compute(predictions=predictions, references=labels)
+
+    trainer = Trainer(
+        model_init=lambda: init_model(None, model_name, use_bitfit),
+        args=training_args,
+        train_dataset=train_data,
+        eval_dataset=val_data,
+        compute_metrics=compute_metrics,
+    )
+
+    return trainer
+    
 
 
 def hyperparameter_search_settings() -> Dict[str, Any]:
@@ -79,7 +123,24 @@ def hyperparameter_search_settings() -> Dict[str, Any]:
 
     :return: Keyword arguments for Trainer.hyperparameter_search
     """
-    raise NotImplementedError("Problem 2c has not been completed yet!")
+    #raise NotImplementedError("Problem 2c has not been completed yet!")
+    search_space = {
+        "learning_rate": [3e-4, 1e-4, 5e-5, 3e-5],
+        "per_device_train_batch_size": [8, 16, 32, 64, 128]
+    }
+
+    def optuna_hp_space(trial):
+        return {
+            "learning_rate": trial.suggest_categorical("learning_rate", search_space["learning_rate"]),
+            "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", search_space["per_device_train_batch_size"]),
+        }
+
+    return {
+        "direction": "maximize",
+        "backend": "optuna",
+        "hp_space": optuna_hp_space,
+        "sampler": optuna.samplers.GridSampler(search_space)
+    }
 
 
 if __name__ == "__main__":  # Use this script to train your model

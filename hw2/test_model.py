@@ -6,9 +6,12 @@ import pickle
 import evaluate
 from datasets import load_dataset
 from transformers import BertTokenizerFast, BertForSequenceClassification, \
-    Trainer, TrainingArguments
+    Trainer, TrainingArguments, EvalPrediction
+import numpy as np
 
 from train_model import preprocess_dataset
+
+
 
 
 def init_tester(directory: str) -> Trainer:
@@ -23,7 +26,29 @@ def init_tester(directory: str) -> Trainer:
         saved
     :return: A Trainer used for testing
     """
-    raise NotImplementedError("Problem 2b has not been completed yet!")
+    #raise NotImplementedError("Problem 2b has not been completed yet!")
+    model = BertForSequenceClassification.from_pretrained(directory)
+    training_args = TrainingArguments(
+        output_dir="./results",
+        do_train = False,
+        do_eval = True
+    )
+    def compute_metrics(p: EvalPrediction):
+        metric = evaluate.load("accuracy")
+        logits, labels = p.predictions, p.label_ids
+        predictions = np.argmax(logits, axis=-1)
+        return metric.compute(predictions=predictions, references=labels)
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        compute_metrics=compute_metrics,
+    )
+
+    return trainer
+        
+
+
 
 
 if __name__ == "__main__":  # Use this script to test your model
